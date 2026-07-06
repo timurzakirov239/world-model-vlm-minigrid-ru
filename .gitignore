@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environments
+.venv/
+venv/
+env/
+.hf-cache/
+.pip-cache/
+.torch-cache/
+.clip-cache/
+model_cache/
+
+# Experiment artifacts
+artifacts/
+runs/
+wandb/
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+
+# Reports/build outputs
+reports/*.aux
+reports/*.log
+reports/*.out
+reports/*.synctex.gz
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
