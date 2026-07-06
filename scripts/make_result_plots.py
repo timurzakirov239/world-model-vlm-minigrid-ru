@@ -14,8 +14,8 @@ def make_plots(eval_dir: Path) -> None:
 
     label_map = {
         "random": "Random",
-        "wm_reward": "WM planning",
-        "wm_vlm": "WM + VLM",
+        "wm_reward": "World model",
+        "wm_vlm": "World model + VLM",
     }
     colors = {
         "random": "#7c7c7c",
@@ -33,7 +33,7 @@ def make_plots(eval_dir: Path) -> None:
     )
     plt.ylim(0, 1)
     plt.ylabel("Success rate")
-    plt.title("MiniGrid-Empty-5x5-v0 evaluation")
+    plt.title("Оценка MiniGrid-Empty-5x5-v0")
     plt.grid(axis="y", alpha=0.25)
     plt.tight_layout()
     plt.savefig(plots_dir / "success_rate.png", dpi=180)
@@ -48,7 +48,7 @@ def make_plots(eval_dir: Path) -> None:
         capsize=4,
     )
     plt.ylabel("Mean return")
-    plt.title("Average episodic return")
+    plt.title("Средний return за эпизод")
     plt.grid(axis="y", alpha=0.25)
     plt.tight_layout()
     plt.savefig(plots_dir / "mean_return.png", dpi=180)
