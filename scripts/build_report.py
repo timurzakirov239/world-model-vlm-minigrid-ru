@@ -42,6 +42,10 @@ def paragraph(text: str, style: ParagraphStyle) -> Paragraph:
     return Paragraph(text.replace("\n", "<br/>"), style)
 
 
+def bullet_list(items: list[str], style: ParagraphStyle) -> list[Paragraph]:
+    return [paragraph(f"- {item}", style) for item in items]
+
+
 def make_episode_strip(gif_path: Path, out_path: Path, frames_count: int = 5) -> Path:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     frames = imageio.mimread(gif_path)
@@ -64,16 +68,12 @@ def make_episode_strip(gif_path: Path, out_path: Path, frames_count: int = 5) ->
     return out_path
 
 
-def build_report(eval_dir: Path, out_path: Path) -> None:
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    summary = pd.read_csv(eval_dir / "summary.csv")
-    font_regular, font_bold = register_fonts()
-
-    base_styles = getSampleStyleSheet()
-    styles = {
+def make_styles(font_regular: str, font_bold: str) -> dict[str, ParagraphStyle]:
+    base = getSampleStyleSheet()
+    return {
         "Title": ParagraphStyle(
             name="TitleRus",
-            parent=base_styles["Title"],
+            parent=base["Title"],
             fontName=font_bold,
             fontSize=20,
             leading=24,
@@ -81,7 +81,7 @@ def build_report(eval_dir: Path, out_path: Path) -> None:
         ),
         "Heading2": ParagraphStyle(
             name="Heading2Rus",
-            parent=base_styles["Heading2"],
+            parent=base["Heading2"],
             fontName=font_bold,
             fontSize=14,
             leading=18,
@@ -90,101 +90,32 @@ def build_report(eval_dir: Path, out_path: Path) -> None:
         ),
         "Heading3": ParagraphStyle(
             name="Heading3Rus",
-            parent=base_styles["Heading3"],
+            parent=base["Heading3"],
             fontName=font_bold,
             fontSize=11,
             leading=14,
-            spaceBefore=8,
+            spaceBefore=7,
             spaceAfter=4,
         ),
         "BodyText": ParagraphStyle(
             name="BodyRus",
-            parent=base_styles["BodyText"],
+            parent=base["BodyText"],
             fontName=font_regular,
-            fontSize=10,
-            leading=13,
-            spaceAfter=6,
+            fontSize=9.7,
+            leading=12.5,
+            spaceAfter=5,
         ),
         "Small": ParagraphStyle(
             name="SmallRus",
-            parent=base_styles["BodyText"],
+            parent=base["BodyText"],
             fontName=font_regular,
-            fontSize=8.5,
-            leading=11,
+            fontSize=8.2,
+            leading=10.5,
         ),
     }
 
-    doc = SimpleDocTemplate(
-        str(out_path),
-        pagesize=A4,
-        rightMargin=1.6 * cm,
-        leftMargin=1.6 * cm,
-        topMargin=1.4 * cm,
-        bottomMargin=1.4 * cm,
-        title="World Model + VLM Scorer для MiniGrid",
-    )
-    story = []
 
-    story.append(Paragraph("World Model + VLM Scorer для MiniGrid", styles["Title"]))
-    story.append(
-        paragraph(
-            "Цель проекта - показать небольшую model-based RL систему, где агент в MiniGrid "
-            "планирует действия через обученную модель мира и использует VLM-based scorer "
-            "для оценки будущих состояний относительно текстовой цели: "
-            "<b>agent at the green goal</b>.",
-            styles["BodyText"],
-        )
-    )
-
-    story.append(Paragraph("Среда и данные", styles["Heading2"]))
-    story.append(
-        paragraph(
-            "В качестве среды используется MiniGrid-Empty-5x5-v0. Агент стартует в небольшой "
-            "комнате и должен дойти до зелёной клетки-цели. Данные для модели мира собраны "
-            "из MiniGrid путём перебора допустимых позиций агента, направлений взгляда и "
-            "действий навигации: left, right, forward. Всего получено 3240 переходов, включая "
-            "60 переходов с положительной наградой за достижение цели.",
-            styles["BodyText"],
-        )
-    )
-
-    story.append(Paragraph("Модель мира", styles["Heading2"]))
-    story.append(
-        paragraph(
-            "Модель мира реализована как компактная RSSM-style модель в духе PlaNet/Dreamer. "
-            "Она хранит рекуррентное скрытое состояние h_t и stochastic latent state z_t. "
-            "По текущему состоянию и действию модель предсказывает следующий нормализованный "
-            "state агента, reward и вероятность done. Во время планирования candidate action "
-            "sequences прокручиваются внутри этой learned world model на горизонте H=14.",
-            styles["BodyText"],
-        )
-    )
-
-    story.append(Paragraph("VLM scorer и планирование", styles["Heading2"]))
-    story.append(
-        paragraph(
-            "Для VLM scorer используется CLIP ViT-B/32 из open_clip. Возможные будущие состояния "
-            "рендерятся как RGB-кадры MiniGrid и сравниваются с текстовой целью. Важно, что "
-            "VLM-score применяется к imagined future states из rollout-а, а не только к текущему "
-            "наблюдению. Планировщик использует MPC/random shooting: на каждом шаге сравнивает "
-            "768 кандидатных последовательностей действий, выполняет первое действие из лучшей "
-            "последовательности и затем планирует заново.",
-            styles["BodyText"],
-        )
-    )
-
-    story.append(Paragraph("Baseline-сравнение", styles["Heading2"]))
-    story.append(
-        paragraph(
-            "Сравниваются три варианта: random policy, planning в world model без VLM-score и "
-            "planning в world model с VLM-score. В последнем варианте также используется небольшой "
-            "goal-distance stabilizer, потому что CLIP обучался в основном на естественных "
-            "изображениях, а MiniGrid-кадры являются символическими.",
-            styles["BodyText"],
-        )
-    )
-
-    story.append(Paragraph("Количественные результаты", styles["Heading2"]))
+def add_result_table(story: list, summary: pd.DataFrame, styles: dict[str, ParagraphStyle], font_regular: str, font_bold: str) -> None:
     table_data = [["Метод", "Эпизоды", "Success rate", "Mean return", "Mean steps"]]
     labels = {
         "random": "Random",
@@ -227,25 +158,19 @@ def build_report(eval_dir: Path, out_path: Path) -> None:
         )
     )
 
+
+def add_plots(story: list, eval_dir: Path) -> None:
     success_plot = eval_dir / "plots" / "success_rate.png"
     return_plot = eval_dir / "plots" / "mean_return.png"
     if success_plot.exists():
-        story.append(Spacer(1, 0.3 * cm))
-        story.append(Image(str(success_plot), width=12.5 * cm, height=8.1 * cm))
+        story.append(Spacer(1, 0.25 * cm))
+        story.append(Image(str(success_plot), width=12.3 * cm, height=7.9 * cm))
     if return_plot.exists():
-        story.append(Spacer(1, 0.2 * cm))
-        story.append(Image(str(return_plot), width=12.5 * cm, height=8.1 * cm))
+        story.append(Spacer(1, 0.15 * cm))
+        story.append(Image(str(return_plot), width=12.3 * cm, height=7.9 * cm))
 
-    story.append(PageBreak())
-    story.append(Paragraph("Визуализация эпизодов", styles["Heading2"]))
-    story.append(
-        paragraph(
-            "Ниже показаны раскадровки трёх GIF-примеров из reports/assets/. В самом репозитории "
-            "эти эпизоды сохранены как анимированные GIF.",
-            styles["BodyText"],
-        )
-    )
 
+def add_episode_strips(story: list, styles: dict[str, ParagraphStyle]) -> None:
     gif_specs = [
         ("Random policy", ASSETS_DIR / "random_seed_0.gif", STRIP_DIR / "random_seed_0_strip.png"),
         (
@@ -264,39 +189,212 @@ def build_report(eval_dir: Path, out_path: Path) -> None:
             make_episode_strip(gif_path, strip_path)
             story.append(Paragraph(title, styles["Heading3"]))
             story.append(Image(str(strip_path), width=15.0 * cm, height=3.0 * cm))
-            story.append(Spacer(1, 0.15 * cm))
+            story.append(Spacer(1, 0.12 * cm))
 
-    story.append(Paragraph("Основные проблемы", styles["Heading2"]))
+
+def build_report(eval_dir: Path, out_path: Path) -> None:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    summary = pd.read_csv(eval_dir / "summary.csv")
+    font_regular, font_bold = register_fonts()
+    styles = make_styles(font_regular, font_bold)
+
+    doc = SimpleDocTemplate(
+        str(out_path),
+        pagesize=A4,
+        rightMargin=1.6 * cm,
+        leftMargin=1.6 * cm,
+        topMargin=1.35 * cm,
+        bottomMargin=1.35 * cm,
+        title="World Model + VLM Scorer для MiniGrid",
+    )
+    story = []
+
+    story.append(Paragraph("World Model + VLM Scorer для MiniGrid", styles["Title"]))
     story.append(
         paragraph(
-            "1. CLIP-score на MiniGrid шумный, потому что изображения символические и сильно "
-            "отличаются от естественных изображений из pretraining.\n"
-            "2. Компактная RSSM хорошо подходит для Empty-5x5, но это не полный pixel-level "
-            "Dreamer. Для более сложных сред нужен stronger decoder и более богатое latent state.\n"
-            "3. Random shooting прост и нагляден, но sample-inefficient: рост числа candidates "
-            "улучшает планирование, но увеличивает время работы на CPU.\n"
-            "4. В простой среде reward-only planning уже достаточно силён, поэтому VLM-term "
-            "требует аккуратного веса.",
+            "В работе реализован небольшой model-based RL проект: агент в MiniGrid планирует "
+            "действия через обученную модель мира и использует VLM-based scorer для оценки "
+            "будущих состояний относительно текстовой цели <b>agent at the green goal</b>.",
             styles["BodyText"],
         )
     )
 
-    story.append(Paragraph("Что можно улучшить дальше", styles["Heading2"]))
+    story.append(Paragraph("1. Постановка задачи", styles["Heading2"]))
     story.append(
         paragraph(
-            "Дальше логично перейти к DoorKey-8x8, обучить pixel decoder и применять VLM напрямую "
-            "к decoded imagined frames. Также можно заменить random shooting на CEM, добавить "
-            "uncertainty-aware planning и проверить цели вроде 'agent next to the key', где "
-            "языковая цель может быть полезнее простой reward-эвристики.",
+            "Требовалось объединить world model и VLM-based scorer для управления агентом в "
+            "простой среде. Ключевое условие - VLM должен оценивать не только текущее "
+            "наблюдение, а именно будущие кадры или состояния, полученные через imagined "
+            "rollouts. Также нужно было сравнить метод с random policy и planner-ом без VLM.",
+            styles["BodyText"],
+        )
+    )
+    story.extend(
+        bullet_list(
+            [
+                "среда: MiniGrid-Empty-5x5-v0;",
+                "world model: компактная RSSM-style модель в духе PlaNet/Dreamer;",
+                "VLM scorer: CLIP ViT-B/32 через open_clip;",
+                "planner: MPC/random shooting;",
+                "метрики: success rate, mean return, mean steps.",
+            ],
             styles["BodyText"],
         )
     )
 
-    story.append(Paragraph("Файлы", styles["Heading2"]))
+    story.append(Paragraph("2. Общая архитектура", styles["Heading2"]))
     story.append(
         paragraph(
-            "PDF-отчёт, графики и GIF-примеры лежат в reports/. Данные, checkpoints и evaluation "
-            "CSV воспроизводятся скриптами и сохраняются локально в artifacts/.",
+            "Пайплайн состоит из пяти шагов: сбор переходов из MiniGrid, обучение модели мира, "
+            "предрасчёт VLM-score для возможных будущих состояний, MPC-планирование по imagined "
+            "rollouts и evaluation трёх политик. На каждом реальном шаге среды planner генерирует "
+            "candidate action sequences, прокручивает их внутри RSSM и выбирает последовательность "
+            "с максимальным objective.",
+            styles["BodyText"],
+        )
+    )
+    story.append(
+        paragraph(
+            "Objective для варианта World model + VLM включает predicted reward, VLM-score и "
+            "небольшой goal-distance stabilizer. Последний нужен не как основной метод, а как "
+            "практическая стабилизация, потому что CLIP обучался на естественных изображениях, "
+            "а MiniGrid является символическим grid-world.",
+            styles["BodyText"],
+        )
+    )
+
+    story.append(Paragraph("3. Среда и данные", styles["Heading2"]))
+    story.append(
+        paragraph(
+            "В MiniGrid-Empty-5x5-v0 агент стартует в маленькой комнате и должен дойти до "
+            "зелёной клетки-цели. Для обучения world model был собран transition dataset: "
+            "перебирались допустимые позиции агента, четыре направления взгляда и три "
+            "навигационных действия - left, right, forward. Такой набор покрывает локальную "
+            "динамику среды и делает обучение компактной модели стабильным.",
+            styles["BodyText"],
+        )
+    )
+    story.append(
+        paragraph(
+            "Итоговый dataset содержит 3240 переходов. Среди них 60 переходов заканчиваются "
+            "достижением цели и дают положительную награду. Помимо этого были сохранены GIF "
+            "эпизодов для визуальной проверки поведения политик.",
+            styles["BodyText"],
+        )
+    )
+
+    story.append(Paragraph("4. RSSM world model", styles["Heading2"]))
+    story.append(
+        paragraph(
+            "RSSM расшифровывается как Recurrent State-Space Model. В такой модели есть "
+            "детерминированная память h_t и stochastic latent state z_t. В полном Dreamer "
+            "RSSM обычно работает с пиксельными наблюдениями и latent-представлениями. В этом "
+            "проекте сделана компактная state-based версия: она предсказывает следующий "
+            "нормализованный state агента, reward и done probability.",
+            styles["BodyText"],
+        )
+    )
+    story.append(
+        paragraph(
+            "Такое упрощение выбрано осознанно: цель задания - показать саму связку world model, "
+            "imagined rollouts, VLM-score и MPC. Для маленькой среды state-based RSSM позволяет "
+            "получить стабильный результат без долгого обучения pixel decoder-а.",
+            styles["BodyText"],
+        )
+    )
+
+    story.append(Paragraph("5. VLM scorer", styles["Heading2"]))
+    story.append(
+        paragraph(
+            "Для VLM scorer используется CLIP ViT-B/32. Все возможные будущие состояния MiniGrid "
+            "рендерятся как RGB-кадры и сравниваются с текстом agent at the green goal. Эти "
+            "оценки сохраняются в cache, чтобы во время MPC не запускать CLIP заново для каждой "
+            "candidate trajectory.",
+            styles["BodyText"],
+        )
+    )
+    story.append(
+        paragraph(
+            "Смысловой момент: score применяется к imagined future states, полученным из rollout-а "
+            "world model. То есть planner выбирает действие не только по текущему кадру, а по "
+            "оценке возможного будущего.",
+            styles["BodyText"],
+        )
+    )
+
+    story.append(Paragraph("6. Планирование", styles["Heading2"]))
+    story.append(
+        paragraph(
+            "Используется MPC с random shooting. На каждом шаге генерируется 768 случайных "
+            "последовательностей действий длиной 14. Каждая последовательность прокручивается "
+            "внутри learned world model. Затем считается objective, выбирается лучшая "
+            "последовательность, в реальной среде выполняется только её первое действие, после "
+            "чего процесс повторяется.",
+            styles["BodyText"],
+        )
+    )
+
+    story.append(Paragraph("7. Результаты", styles["Heading2"]))
+    add_result_table(story, summary, styles, font_regular, font_bold)
+    story.append(
+        paragraph(
+            "Планирование в learned world model заметно лучше random policy. Добавление VLM-score "
+            "в этом запуске улучшило success rate с 0.73 до 0.80 и mean return с 0.610 до 0.682. "
+            "Также World model + VLM в среднем достигает результата быстрее: 21.1 шага против "
+            "24.3 у reward-only planner.",
+            styles["BodyText"],
+        )
+    )
+    add_plots(story, eval_dir)
+
+    story.append(PageBreak())
+    story.append(Paragraph("8. Визуализация эпизодов", styles["Heading2"]))
+    story.append(
+        paragraph(
+            "Ниже показаны раскадровки трёх GIF-примеров. Они помогают визуально сравнить "
+            "поведение random policy, reward-only planner и planner-а с VLM-score. Анимированные "
+            "версии GIF также сохранены в репозитории.",
+            styles["BodyText"],
+        )
+    )
+    add_episode_strips(story, styles)
+
+    story.append(Paragraph("9. С какими трудностями столкнулись", styles["Heading2"]))
+    story.extend(
+        bullet_list(
+            [
+                "CLIP-score оказался шумным на MiniGrid, потому что кадры символические и не похожи на естественные изображения из pretraining.",
+                "Полный pixel-level Dreamer был бы слишком тяжёлым для небольшого учебного демо, поэтому была выбрана компактная state-based RSSM.",
+                "Random shooting требует много candidate trajectories: меньше candidates работает быстрее, но качество planning падает.",
+                "Reward-only planner в простой Empty-среде уже достаточно силён, поэтому VLM-term пришлось взвешивать аккуратно.",
+                "Для PDF GIF нельзя встроить как настоящую анимацию, поэтому в отчёт добавлены раскадровки эпизодов.",
+            ],
+            styles["BodyText"],
+        )
+    )
+
+    story.append(Paragraph("10. Что можно улучшить дальше", styles["Heading2"]))
+    story.extend(
+        bullet_list(
+            [
+                "перейти к DoorKey-8x8, где языковая цель вроде agent next to the key будет полезнее;",
+                "обучить pixel decoder и применять VLM напрямую к decoded imagined frames;",
+                "заменить random shooting на CEM для более эффективного поиска действий;",
+                "добавить uncertainty-aware planning, чтобы planner учитывал неуверенность world model;",
+                "сравнить разные VLM и prompt-формулировки.",
+            ],
+            styles["BodyText"],
+        )
+    )
+
+    story.append(Paragraph("11. Вывод", styles["Heading2"]))
+    story.append(
+        paragraph(
+            "Проект показывает рабочую связку world model, imagined rollouts, VLM-based scoring "
+            "и MPC-planning. Даже в небольшой MiniGrid-среде видно, что learned model позволяет "
+            "планировать лучше случайной политики, а добавление VLM-score может улучшить выбор "
+            "действий, если аккуратно учитывать шумность vision-language модели на символических "
+            "изображениях.",
             styles["BodyText"],
         )
     )
